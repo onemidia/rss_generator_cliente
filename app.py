@@ -78,7 +78,7 @@ def upload_file():
 
             # Retorna link clicável
             feed_url = f"https://rss-generator.onrender.com/feed/{cliente}.xml"
-            return f'Arquivo recebido e feed RSS atualizado! {url}'
+            return Markup(f'Arquivo recebido e feed RSS atualizado! Acesse em: <a href="{feed_url}" target="_blank">{feed_url}</a>')
 
     return render_template('index.html')
 
