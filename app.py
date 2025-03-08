@@ -48,8 +48,11 @@ def txt_para_rss(cliente, arquivo_txt):
                 ET.SubElement(item, "pubDate").text = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
                 ET.SubElement(item, "guid").text = codigo
 
+    # Salvar XML com indentação correta
     tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")  # Adiciona indentação para melhor formatação
     tree.write(arquivo_xml, encoding="utf-8", xml_declaration=True)
+    
     print(f"Feed RSS gerado para {cliente} em: {arquivo_xml}")
 
 @app.route('/', methods=['GET', 'POST'])
