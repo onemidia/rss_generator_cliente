@@ -1,94 +1,88 @@
 import os
-import logging
-from flask import Flask, request, redirect, send_file, render_template
+from flask import Flask, render_template, request, redirect, url_for, send_file
 from werkzeug.utils import secure_filename
+from datetime import datetime
+import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
 
-# Configurações do aplicativo
+# Configurações
 UPLOAD_FOLDER = 'uploads'
+FEED_FOLDER = 'feeds'
 ALLOWED_EXTENSIONS = {'txt'}
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Função para verificar se o arquivo tem a extensão permitida
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['FEED_FOLDER'] = FEED_FOLDER
+
+# Garante que as pastas existem
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(FEED_FOLDER, exist_ok=True)
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Função para converter o arquivo .txt para o formato RSS
-def txt_para_rss(file_path, xml_path, titulo, link, descricao):
-    import xml.etree.ElementTree as ET
+def txt_para_rss(cliente, arquivo_txt):
+    """Gera um feed RSS a partir de um arquivo TXT para um cliente específico"""
+    arquivo_xml = os.path.join(app.config['FEED_FOLDER'], f"{cliente}.xml")
 
-    # Criando o feed RSS
-    rss = ET.Element('rss', version="2.0")
-    channel = ET.SubElement(rss, 'channel')
+    root = ET.Element("rss", version="2.0")
+    channel = ET.SubElement(root, "channel")
 
-    title = ET.SubElement(channel, 'title')
-    title.text = titulo
-    link_tag = ET.SubElement(channel, 'link')
-    link_tag.text = link
-    description = ET.SubElement(channel, 'description')
-    description.text = descricao
+    ET.SubElement(channel, "title").text = f"Feed de {cliente}"
+    ET.SubElement(channel, "link").text = f"https://rss-generator.onrender.com/feed/{cliente}.xml"
+    ET.SubElement(channel, "description").text = f"Lista de produtos de {cliente}"
+    ET.SubElement(channel, "pubDate").text = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
 
-    # Lendo o conteúdo do arquivo .txt
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
+    with open(arquivo_txt, "r") as f:
+        for linha in f:
+            dados = linha.strip().split(";")
+            if len(dados) >= 4:
+                codigo, produto, preco, unidade = dados[:4]
 
-    # Adicionando os itens ao feed
-    for line in lines:
-        product_name, product_value = line.strip().split('-')
-        item = ET.SubElement(channel, 'item')
+                preco_formatado = preco.replace('.', ',')  # Substitui ponto por vírgula
 
-        item_title = ET.SubElement(item, 'title')
-        item_title.text = product_name.strip()
+                item = ET.SubElement(channel, "item")
+                ET.SubElement(item, "title").text = produto  # Nome do produto no título
+                ET.SubElement(item, "link").text = f"https://seusite.com/produtos/{codigo}"
+                ET.SubElement(item, "description").text = f"R$ {preco_formatado}/{unidade}"  # Apenas o preço no description
+                ET.SubElement(item, "pubDate").text = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
+                ET.SubElement(item, "guid").text = codigo
 
-        item_link = ET.SubElement(item, 'link')
-        item_link.text = link
-
-        item_description = ET.SubElement(item, 'description')
-        item_description.text = f'{product_value.strip().replace(".", ",")}'
-
-    # Salvando o arquivo XML
-    tree = ET.ElementTree(rss)
-    tree.write(xml_path)
+    tree = ET.ElementTree(root)
+    tree.write(arquivo_xml, encoding="utf-8", xml_declaration=True)
+    print(f"Feed RSS gerado para {cliente} em: {arquivo_xml}")
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
-    try:
-        if request.method == 'POST':
-            if 'file' not in request.files:
-                return "Nenhum arquivo enviado", 400
-            file = request.files['file']
-            if file.filename == '':
-                return "Nenhum arquivo selecionado", 400
-            if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(file_path)
+    if request.method == 'POST':
+        if 'file' not in request.files or 'cliente' not in request.form:
+            return redirect(request.url)
 
-                # Gerar o feed RSS para o cliente
-                cliente_nome = 'caio'  # Este valor pode vir de algum parâmetro ou banco de dados
-                xml_path = f'feeds/{cliente_nome}.xml'
-                txt_para_rss(file_path, xml_path, 'Carnes Nobres', 'https://seusite.com/feed', 'Lista de Carnes Nobres e seus preços.')
+        file = request.files['file']
+        cliente = request.form['cliente'].strip().lower()
 
-                # Gerar a URL para o feed
-                url = f'/feeds/{cliente_nome}.xml'  # Corrigir a URL
+        if file.filename == '' or not cliente:
+            return redirect(request.url)
 
-                return f'Arquivo recebido e feed RSS atualizado! Acesse em: {url}'
-            else:
-                return "Arquivo não permitido. Apenas arquivos .txt são aceitos.", 400
-        return render_template('upload.html')  # Caso seja um GET request
-    except Exception as e:
-        logging.error(f"Erro no upload de arquivo: {str(e)}")
-        return "Erro interno no servidor. Tente novamente mais tarde.", 500
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{cliente}.txt")
+            file.save(file_path)
 
-# Rota para acessar o feed gerado
-@app.route('/feeds/<cliente_nome>.xml')
-def serve_feed(cliente_nome):
-    xml_path = f'feeds/{cliente_nome}.xml'
-    if os.path.exists(xml_path):
-        return send_file(xml_path)
-    else:
-        return "Feed não encontrado.", 404
+            # Gera o feed RSS
+            txt_para_rss(cliente, file_path)
+
+            return f'Arquivo recebido e feed RSS atualizado! Acesse em: /feed/{cliente}.xml'
+
+    return render_template('index.html')
+
+@app.route('/feed/<cliente>.xml')
+def serve_feed(cliente):
+    """Retorna o feed XML de um cliente"""
+    arquivo_xml = os.path.join(app.config['FEED_FOLDER'], f"{cliente}.xml")
+    if os.path.exists(arquivo_xml):
+        return send_file(arquivo_xml, mimetype='application/rss+xml')
+    return "Feed não encontrado!", 404
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False, host="0.0.0.0", port=10000)
