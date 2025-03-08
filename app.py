@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, send_file
+from flask import Flask, render_template, request, redirect, url_for, send_file, Markup
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import xml.etree.ElementTree as ET
@@ -25,15 +25,15 @@ def txt_para_rss(cliente, arquivo_txt):
     """Gera um feed RSS a partir de um arquivo TXT para um cliente específico"""
     arquivo_xml = os.path.join(app.config['FEED_FOLDER'], f"{cliente}.xml")
 
-    root = ET.Element("rss", version="2.0")
+    root = ET.Element("rss", {"version": "2.0"})
     channel = ET.SubElement(root, "channel")
 
     ET.SubElement(channel, "title").text = f"Feed de {cliente}"
     ET.SubElement(channel, "link").text = f"https://rss-generator.onrender.com/feed/{cliente}.xml"
     ET.SubElement(channel, "description").text = f"Lista de produtos de {cliente}"
-    ET.SubElement(channel, "pubDate").text = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
+    ET.SubElement(channel, "pubDate").text = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
 
-    with open(arquivo_txt, "r") as f:
+    with open(arquivo_txt, "r", encoding="utf-8") as f:
         for linha in f:
             dados = linha.strip().split(";")
             if len(dados) >= 4:
@@ -45,11 +45,14 @@ def txt_para_rss(cliente, arquivo_txt):
                 ET.SubElement(item, "title").text = produto  # Nome do produto no título
                 ET.SubElement(item, "link").text = f"https://seusite.com/produtos/{codigo}"
                 ET.SubElement(item, "description").text = f"R$ {preco_formatado}/{unidade}"  # Apenas o preço no description
-                ET.SubElement(item, "pubDate").text = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
+                ET.SubElement(item, "pubDate").text = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
                 ET.SubElement(item, "guid").text = codigo
 
+    # Salvar XML com indentação correta
     tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")  # Adiciona indentação para melhor formatação
     tree.write(arquivo_xml, encoding="utf-8", xml_declaration=True)
+    
     print(f"Feed RSS gerado para {cliente} em: {arquivo_xml}")
 
 @app.route('/', methods=['GET', 'POST'])
@@ -72,7 +75,9 @@ def upload_file():
             # Gera o feed RSS
             txt_para_rss(cliente, file_path)
 
-            return f'Arquivo recebido e feed RSS atualizado! Acesse em: /feed/{cliente}.xml'
+            # Retorna link clicável
+            feed_url = f"https://rss-generator.onrender.com/feed/{cliente}.xml"
+            return Markup(f'Arquivo recebido e feed RSS atualizado! Acesse em: <a href="{feed_url}" target="_blank">{feed_url}</a>')
 
     return render_template('index.html')
 
