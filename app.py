@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, request, redirect, send_file
+from flask import Flask, request, redirect, send_file, render_template
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
