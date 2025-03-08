@@ -1,8 +1,7 @@
 import os
 import logging
-from flask import Flask, request, redirect
+from flask import Flask, request, redirect, send_file
 from werkzeug.utils import secure_filename
-from flask import render_template
 
 app = Flask(__name__)
 
@@ -57,10 +56,10 @@ def upload_file():
     try:
         if request.method == 'POST':
             if 'file' not in request.files:
-                return redirect(request.url)
+                return "Nenhum arquivo enviado", 400
             file = request.files['file']
             if file.filename == '':
-                return redirect(request.url)
+                return "Nenhum arquivo selecionado", 400
             if file and allowed_file(file.filename):
                 filename = secure_filename(file.filename)
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -76,10 +75,11 @@ def upload_file():
 
                 return f'Arquivo recebido e feed RSS atualizado! Acesse em: {url}'
             else:
-                return "Arquivo não permitido. Apenas arquivos .txt são aceitos."
+                return "Arquivo não permitido. Apenas arquivos .txt são aceitos.", 400
+        return render_template('upload.html')  # Caso seja um GET request
     except Exception as e:
         logging.error(f"Erro no upload de arquivo: {str(e)}")
-        return "Erro interno no servidor. Tente novamente mais tarde."
+        return "Erro interno no servidor. Tente novamente mais tarde.", 500
 
 # Rota para acessar o feed gerado
 @app.route('/feeds/<cliente_nome>.xml')
@@ -88,7 +88,7 @@ def serve_feed(cliente_nome):
     if os.path.exists(xml_path):
         return send_file(xml_path)
     else:
-        return "Feed não encontrado."
+        return "Feed não encontrado.", 404
 
 if __name__ == '__main__':
     app.run(debug=True)
