@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, send_file
+from flask import Flask, render_template, request, redirect, url_for, send_file, make_response
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import xml.etree.ElementTree as ET
@@ -38,19 +38,18 @@ def txt_para_rss(cliente, arquivo_txt):
             dados = linha.strip().split(";")
             if len(dados) >= 4:
                 codigo, produto, preco, unidade = dados[:4]
-
                 preco_formatado = preco.replace('.', ',')  # Substitui ponto por vírgula
 
                 item = ET.SubElement(channel, "item")
-                ET.SubElement(item, "title").text = produto  # Nome do produto no título
+                ET.SubElement(item, "title").text = produto
                 ET.SubElement(item, "link").text = f"https://seusite.com/produtos/{codigo}"
-                ET.SubElement(item, "description").text = f"R$ {preco_formatado}/{unidade}"  # Apenas o preço no description
+                ET.SubElement(item, "description").text = f"R$ {preco_formatado}/{unidade}"
                 ET.SubElement(item, "pubDate").text = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
                 ET.SubElement(item, "guid").text = codigo
 
     # Salvar XML com indentação correta
     tree = ET.ElementTree(root)
-    ET.indent(tree, space="  ")  # Adiciona indentação para melhor formatação
+    ET.indent(tree, space="  ")
     tree.write(arquivo_xml, encoding="utf-8", xml_declaration=True)
     
     print(f"Feed RSS gerado para {cliente} em: {arquivo_xml}")
@@ -81,10 +80,14 @@ def upload_file():
 
 @app.route('/feed/<cliente>.xml')
 def serve_feed(cliente):
-    """Retorna o feed XML de um cliente"""
+    """Retorna o feed XML de um cliente com cache controlado"""
     arquivo_xml = os.path.join(app.config['FEED_FOLDER'], f"{cliente}.xml")
     if os.path.exists(arquivo_xml):
-        return send_file(arquivo_xml, mimetype='application/rss+xml')
+        response = make_response(send_file(arquivo_xml, mimetype='application/rss+xml'))
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     return "Feed não encontrado!", 404
 
 if __name__ == '__main__':
