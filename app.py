@@ -1,18 +1,20 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, send_file
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import xml.etree.ElementTree as ET
 
 app = Flask(__name__)
+
+# Configurações
 UPLOAD_FOLDER = 'uploads'
-FEED_FOLDER = 'feeds'  # Pasta onde os feeds serão armazenados
+FEED_FOLDER = 'feeds'
 ALLOWED_EXTENSIONS = {'txt'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['FEED_FOLDER'] = FEED_FOLDER
 
-# Criar as pastas se não existirem
+# Garante que as pastas existem
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(FEED_FOLDER, exist_ok=True)
 
@@ -37,10 +39,12 @@ def txt_para_rss(cliente, arquivo_txt):
             if len(dados) >= 4:
                 codigo, produto, preco, unidade = dados[:4]
 
+                preco_formatado = preco.replace('.', ',')  # Substitui ponto por vírgula
+
                 item = ET.SubElement(channel, "item")
-                ET.SubElement(item, "title").text = produto
+                ET.SubElement(item, "title").text = produto  # Nome do produto no título
                 ET.SubElement(item, "link").text = f"https://seusite.com/produtos/{codigo}"
-                ET.SubElement(item, "description").text = f"{produto} - R${preco}/{unidade}"
+                ET.SubElement(item, "description").text = f"R$ {preco_formatado}/{unidade}"  # Apenas o preço no description
                 ET.SubElement(item, "pubDate").text = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
                 ET.SubElement(item, "guid").text = codigo
 
@@ -51,35 +55,34 @@ def txt_para_rss(cliente, arquivo_txt):
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
-        cliente = request.form.get('cliente')  # Obtém o nome do cliente do formulário
-        if not cliente:
-            return "Erro: Informe um nome de cliente!", 400
-
-        if 'file' not in request.files:
-            return "Erro: Nenhum arquivo enviado!", 400
+        if 'file' not in request.files or 'cliente' not in request.form:
+            return redirect(request.url)
 
         file = request.files['file']
-        if file.filename == '':
-            return "Erro: Arquivo sem nome!", 400
+        cliente = request.form['cliente'].strip().lower()
+
+        if file.filename == '' or not cliente:
+            return redirect(request.url)
 
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{cliente}.txt")
             file.save(file_path)
 
+            # Gera o feed RSS
             txt_para_rss(cliente, file_path)
-            return f"Arquivo recebido e feed RSS gerado! Acesse: <a href='/feed/{cliente}.xml'>Seu Feed</a>"
+
+            return f'Arquivo recebido e feed RSS atualizado! Acesse em: /feed/{cliente}.xml'
 
     return render_template('index.html')
 
 @app.route('/feed/<cliente>.xml')
 def serve_feed(cliente):
-    """Rota para servir o feed XML do cliente"""
-    file_path = os.path.join(app.config['FEED_FOLDER'], f"{cliente}.xml")
-    if os.path.exists(file_path):
-        return send_from_directory(app.config['FEED_FOLDER'], f"{cliente}.xml")
-    else:
-        return "Feed não encontrado!", 404
+    """Retorna o feed XML de um cliente"""
+    arquivo_xml = os.path.join(app.config['FEED_FOLDER'], f"{cliente}.xml")
+    if os.path.exists(arquivo_xml):
+        return send_file(arquivo_xml, mimetype='application/rss+xml')
+    return "Feed não encontrado!", 404
 
 if __name__ == '__main__':
     app.run(debug=False, host="0.0.0.0", port=10000)
