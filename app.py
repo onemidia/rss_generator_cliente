@@ -1,5 +1,6 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, send_file, Markup
+from flask import Flask, render_template, request, redirect, url_for, send_file
+from markupsafe import Markup
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import xml.etree.ElementTree as ET
